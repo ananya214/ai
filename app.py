@@ -1,39 +1,28 @@
 import streamlit as st
 import numpy as np
 from PIL import Image
-from keras.models import load_model
+from tensorflow.keras.models import load_model
 
 st.set_page_config(page_title="AI Food Safety Advisor", layout="centered")
 
 st.markdown("""
 <style>
-
 .stApp{
 background: linear-gradient(135deg,#0f0f0f,#1c1c1c);
 color:white;
 font-family: 'Segoe UI', sans-serif;
 }
-
 .main-title{
 text-align:center;
 font-size:42px;
 font-weight:700;
 color:#8b9cff;
 }
-
 .subtitle{
 text-align:center;
 color:#cccccc;
 margin-bottom:20px;
 }
-
-.card{
-background:rgba(255,255,255,0.05);
-padding:25px;
-border-radius:15px;
-margin-top:20px;
-}
-
 .safe{
 background:rgba(0,255,150,0.12);
 padding:12px;
@@ -41,7 +30,6 @@ border-radius:10px;
 color:#00ffa6;
 font-weight:600;
 }
-
 .warning{
 background:rgba(255,200,0,0.12);
 padding:12px;
@@ -49,7 +37,6 @@ border-radius:10px;
 color:#ffd54a;
 font-weight:600;
 }
-
 .danger{
 background:rgba(255,0,80,0.15);
 padding:12px;
@@ -57,18 +44,6 @@ border-radius:10px;
 color:#ff4d6d;
 font-weight:600;
 }
-
-/* FIX FILE UPLOADER TEXT */
-
-.stFileUploader label{
-color:white !important;
-font-weight:600;
-}
-
-.stFileUploader div{
-color:white !important;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -80,40 +55,18 @@ def load_models():
 
 food_model, spoilage_model = load_models()
 
-st.sidebar.title("Project Information")
-
-st.sidebar.write("""
-AI system that detects food type and checks food spoilage.
-
-Technologies Used:
-• Python
-• TensorFlow / Keras
-• CNN Deep Learning
-• Streamlit Interface
-
-Food Classes:
-• Dal
-• Rice
-• Roti
-• Other
-""")
-
-st.sidebar.write("Dataset contains food images used to train the AI model.")
-
 st.markdown('<div class="main-title">🥗 AI Food Safety Advisor</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">Detect food type and freshness using AI</div>', unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("Upload Food Image", type=["jpg","jpeg","png","webp"])
 
+# ---------------- FOOD DETECTION ----------------
 def detect_food(img):
-
     img = img.resize((150,150))
-
     img_array = np.array(img)/255.0
     img_array = np.expand_dims(img_array, axis=0)
 
     prediction = food_model.predict(img_array, verbose=0)
-
     index = np.argmax(prediction)
     confidence = float(prediction[0][index])
 
@@ -126,15 +79,13 @@ def detect_food(img):
 
     return food, confidence
 
+# ---------------- SPOILAGE DETECTION ----------------
 def detect_spoilage(img):
-
     img = img.resize((150,150))
-
     img_array = np.array(img)/255.0
     img_array = np.expand_dims(img_array, axis=0)
 
     prediction = spoilage_model.predict(img_array, verbose=0)
-
     prob = float(prediction[0][0])
 
     if prob > 0.45:
@@ -142,65 +93,80 @@ def detect_spoilage(img):
     else:
         return "Fresh", 1 - prob
 
-def safety_logic(food, hours, env):
+# ---------------- SAFETY LOGIC ----------------
+def safety_logic(food, hours, env, temperature):
 
     risk = 0
     explanation = []
 
-    if env == "Summer":
-        risk += 2
-        explanation.append("High temperature increases bacterial growth.")
+    # 🌡️ Temperature logic
+    if temperature >= 35:
+        risk += 3
+        explanation.append("Very high temperature → rapid bacterial growth.")
 
-    elif env == "Room Temperature":
+    elif temperature >= 25:
+        risk += 2
+        explanation.append("Warm temperature → bacteria grow quickly.")
+
+    elif temperature >= 15:
         risk += 1
-        explanation.append("Food left at room temperature may spoil faster.")
+        explanation.append("Moderate temperature → some bacterial growth.")
+
+    else:
+        explanation.append("Cool temperature → slower bacterial activity.")
+
+    # 🏠 Environment logic
+    if env == "Refrigerator":
+        risk -= 2
+        explanation.append("Refrigeration slows spoilage.")
 
     elif env == "Winter":
-        explanation.append("Cold weather slows bacterial growth.")
-
-    elif env == "Refrigerator":
         risk -= 1
-        explanation.append("Refrigeration helps preserve food.")
+        explanation.append("Cold weather helps preserve food.")
 
+    elif env == "Summer":
+        risk += 1
+        explanation.append("Summer increases spoilage risk.")
+
+    # ⏳ Time logic
     if hours > 10:
         risk += 2
-        explanation.append("Food has been stored for a long time.")
+        explanation.append("Food stored too long.")
 
     elif hours > 6:
         risk += 1
-        explanation.append("Food has been sitting for several hours.")
+        explanation.append("Food sitting for several hours.")
 
+    # 🍚 Food logic
     if food == "rice":
         risk += 1
-        explanation.append("Cooked rice can develop Bacillus bacteria.")
+        explanation.append("Rice can grow harmful bacteria.")
 
+    # 🎯 Final decision
     if risk <= 0:
         result = "Safe to Eat"
-        explanation.append("Food storage conditions appear safe.")
+        explanation.append("Conditions are safe.")
 
-    elif risk == 1:
+    elif risk <= 2:
         result = "Eat Soon"
-        explanation.append("Food should be consumed soon.")
+        explanation.append("Consume soon.")
 
     else:
         result = "Not Safe to Eat"
-        explanation.append("High risk of bacterial contamination.")
+        explanation.append("High contamination risk.")
 
     return result, explanation
 
+# ---------------- MAIN APP ----------------
 if uploaded_file is not None:
 
     img = Image.open(uploaded_file).convert("RGB")
-
     st.image(img, width=320)
 
     food, food_conf = detect_food(img)
     condition, cond_conf = detect_spoilage(img)
 
-  
-
     st.subheader("AI Analysis")
-
     st.write(f"Detected Food: **{food}**")
     st.progress(food_conf)
 
@@ -208,28 +174,24 @@ if uploaded_file is not None:
     st.progress(cond_conf)
 
     if condition == "Mold":
-
-        st.markdown('<div class="danger">❌ Mold detected. Do NOT eat this food.</div>', unsafe_allow_html=True)
-
-        st.write("This food shows visible fungal contamination.")
-        st.write("Mold can produce harmful toxins that may cause illness.")
-        st.write("Removing mold does not make the food safe.")
-        st.write("Recommendation: Discard the food immediately.")
+        st.markdown('<div class="danger">❌ Mold detected. Do NOT eat.</div>', unsafe_allow_html=True)
 
     else:
-
         st.markdown('<div class="safe">Food appears fresh</div>', unsafe_allow_html=True)
 
-        hours = st.number_input("Hours since cooked",0,48,0)
+        hours = st.number_input("Hours since cooked", 0, 48, 0)
 
         env = st.selectbox(
             "Storage Environment",
-            ["Room Temperature","Winter","Summer","Refrigerator"]
+            ["Season","Winter","Summer","Refrigerator"]
         )
+
+        # 🌡️ NEW FEATURE
+        temperature = st.slider("Room temperature (°C)", 0, 50, 25)
 
         if st.button("Check Food Safety"):
 
-            result, explanation = safety_logic(food, hours, env)
+            result, explanation = safety_logic(food, hours, env, temperature)
 
             if result == "Safe to Eat":
                 st.markdown('<div class="safe">🟢 Safe to Eat</div>', unsafe_allow_html=True)
@@ -241,17 +203,5 @@ if uploaded_file is not None:
                 st.markdown('<div class="danger">❌ Not Safe to Eat</div>', unsafe_allow_html=True)
 
             st.subheader("Safety Explanation")
-
             for line in explanation:
                 st.write("•", line)
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-st.subheader("Model Limitations")
-
-st.write("""
-• AI accuracy depends on image quality  
-• Dataset size is limited  
-• Some foods may visually look similar  
-• Model may misclassify unfamiliar dishes  
-""")
